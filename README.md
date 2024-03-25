@@ -1,2 +1,2 @@
 # starter-cron
-go framework grpc cron
+go framework cron
