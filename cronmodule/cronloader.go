@@ -11,6 +11,13 @@ import (
 
 var instance *cron.Cron
 
+var jobList = make(map[string]*jobInfo)
+
+type jobInfo struct {
+	jobId   cron.EntryID
+	jobFunc *JobFunc
+}
+
 type singleJob struct {
 	m   sync.Mutex
 	cmd func()
@@ -23,8 +30,10 @@ func (s *singleJob) Run() {
 }
 
 type JobFunc struct {
-
-	// 是否支持运行中的任务继续被调度运行
+	sync.Mutex
+	// 唯一任务名称
+	JobName string
+	// 是否允许同一个任务在上一个调度未完成时继续被调度执行
 	MultiRun bool
 	// 执行表达式
 	Spec string
@@ -33,11 +42,14 @@ type JobFunc struct {
 }
 
 type CronModule struct {
+
 	// 启动日志
 	EnableLogger bool
+
 	// 手动启动定时任务
 	ManualStart bool
-	// 初始化的任务
+
+	// 初始化的任务 初始化的任务不提供后续管理功能
 	Func []JobFunc
 }
 
@@ -57,7 +69,8 @@ func (c *CronModule) Register() (interface{}, error) {
 	}
 	instance = cron.New(opts...)
 	if len(c.Func) > 0 {
-		for _, f := range c.Func {
+		for i := 0; i < len(c.Func); i++ {
+			f := &c.Func[i]
 			var funcId cron.EntryID
 			var err error
 			if f.MultiRun {
@@ -90,18 +103,83 @@ func (c *CronModule) Unregister(maxWaitSeconds uint) (bool, error) {
 	}
 }
 
-// Start 启动已注册任务
+// Start 启动已注册任务 如果CronModule.ManualStart = true时一定需要手动开启
 func Start() {
 	instance.Start()
 }
 
-// AddJob 添加任务
-func AddJob(spec string, cmd func()) (cron.EntryID, error) {
+// NewJob 初始化一个Job配置
+func NewJob(jobName string, spec string, cmd func(), multiRun ...bool) *JobFunc {
+	j := &JobFunc{
+		JobName: jobName,
+		Spec:    spec,
+		Cmd:     cmd,
+	}
+	if len(multiRun) > 0 && multiRun[0] {
+		j.MultiRun = true
+	}
+	return j
+}
+
+// Register 注册该Job
+func (j *JobFunc) Register() error {
+	defer j.Unlock()
+	j.Lock()
+	_, flag := jobList[j.JobName]
+	if flag {
+		return errors.New("the job already exists : " + j.JobName)
+	}
+	var id cron.EntryID
+	var err error
+	if j.MultiRun {
+		id, err = instance.AddFunc(j.Spec, j.Cmd)
+	} else {
+		id, err = instance.AddJob(j.Spec, &singleJob{cmd: j.Cmd})
+	}
+	if err != nil {
+		return err
+	}
+	jobList[j.JobName] = &jobInfo{
+		jobId:   id,
+		jobFunc: j,
+	}
+	return nil
+}
+
+// FlushSpec 更改Job规则
+func (j *JobFunc) FlushSpec(spec string) error {
+	j.Lock()
+	v, flag := jobList[j.JobName]
+	if !flag {
+		return errors.New("the job not exists : " + j.JobName)
+	}
+	j.Unlock()
+	j.Spec = spec
+	instance.Remove(v.jobId)
+	delete(jobList, j.JobName)
+	return j.Register()
+}
+
+// Remove 移除任务
+func (j *JobFunc) Remove() error {
+	defer j.Unlock()
+	j.Lock()
+	v, flag := jobList[j.JobName]
+	if !flag {
+		return errors.New("the job not exists : " + j.JobName)
+	}
+	instance.Remove(v.jobId)
+	delete(jobList, j.JobName)
+	return nil
+}
+
+// AddSimpleJob 添加简单任务
+func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 	return instance.AddFunc(spec, cmd)
 }
 
-// AddSingletonJob 添加单例任务 该任务将忽略正在运行的任务的调度
-func AddSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
+// AddSimpleSingletonJob 添加简单单例任务 该任务将忽略正在运行的任务的调度
+func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
 	return instance.AddJob(spec, &singleJob{cmd: cmd})
 }
 
