@@ -21,13 +21,6 @@ func init() {
 	m = declaration.Module{
 		ModuleLoaders: []declaration.ModuleLoader{&cronmodule.CronModule{
 			EnableLogger: false,
-			//Func: []cronmodule.JobFunc{{
-			//	Spec: "@every 1s",
-			//	Cmd: func() {
-			//		time.Sleep(time.Second * 2)
-			//		atomic.AddInt32(&count1, 1)
-			//	},
-			//}},
 		}},
 	}
 	err := m.Load()
@@ -43,10 +36,10 @@ func TestLoadAndUnLoad(t *testing.T) {
 
 func TestAddSimpleJob(t *testing.T) {
 	cronmodule.AddSimpleJob("@every 1s", func() {
-		fmt.Println(time.Now(), "执行中")
+		fmt.Println(time.Now().Format("15:04:05"), "执行中")
 		time.Sleep(time.Second * 5)
 		atomic.AddInt32(&count2, 1)
-		fmt.Println(time.Now(), "执行完成")
+		fmt.Println(time.Now().Format("15:04:05"), "执行完成")
 	})
 	time.Sleep(time.Second * 30)
 	fmt.Println("init func invoke count", count1, "AddJob invoke count", count2)
@@ -54,17 +47,18 @@ func TestAddSimpleJob(t *testing.T) {
 
 func TestAddSimpleSingletonJob(t *testing.T) {
 	cronmodule.AddSimpleSingletonJob("@every 1s", func() {
-		fmt.Println(time.Now(), "执行中")
+		fmt.Println(time.Now().Format("15:04:05"), "执行中")
 		time.Sleep(time.Second * 5)
 		atomic.AddInt32(&count2, 1)
-		fmt.Println(time.Now(), "执行完成")
+		fmt.Println(time.Now().Format("15:04:05"), "执行完成")
 	})
 	time.Sleep(time.Second * 30)
 	fmt.Println("init func invoke count", count1, "AddJob invoke count", count2)
 }
 
-func TestJob(t *testing.T) {
-	task1 := cronmodule.NewJob("task1", "@every 1s", func() {
+func TestJobFlushSpec(t *testing.T) {
+	spec1 := "@every 1s"
+	task1 := cronmodule.NewJob("task1", &spec1, false, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 		time.Sleep(time.Second * 2)
 	}, true)
@@ -74,15 +68,21 @@ func TestJob(t *testing.T) {
 
 	_ = task1.FlushSpec("@every 2s")
 	time.Sleep(time.Second * 10)
+
+	_ = task1.FlushSpec("@every 1s")
+	time.Sleep(time.Second * 10)
 }
 
-func TestJobs(t *testing.T) {
+func TestJobsFlushSpec(t *testing.T) {
 
-	task1 := cronmodule.NewJob("task1", "@every 2s", func() {
+	spec1 := "@every 1s"
+	spec2 := "@every 1s"
+
+	task1 := cronmodule.NewJob("task1", &spec1, false, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 	})
 
-	task2 := cronmodule.NewJob("task2", "@every 2s", func() {
+	task2 := cronmodule.NewJob("task2", &spec2, false, func() {
 		fmt.Println("task2 invoke", time.Now().Format("15:04:05"))
 		time.Sleep(2 * time.Second)
 	}, true)
@@ -93,7 +93,27 @@ func TestJobs(t *testing.T) {
 
 	_ = task1.FlushSpec("@every 1s")
 	_ = task2.FlushSpec("@every 1s")
+
 	time.Sleep(time.Second * 10)
+}
+
+func TestJobAutoFlushSpec(t *testing.T) {
+	spec1 := "@every 1s"
+	task1 := cronmodule.NewJob("task1", &spec1, true, func() {
+		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
+	}, false)
+	_ = task1.Register()
+
+	go func() {
+		time.Sleep(time.Second * 5)
+		spec1 = "@every 2s"
+		time.Sleep(time.Second * 5)
+		spec1 = "@every 3s"
+		time.Sleep(time.Second * 5)
+		spec1 = "@every 4s"
+	}()
+
+	time.Sleep(time.Second * 30)
 }
 
 func TestUnload(t *testing.T) {
