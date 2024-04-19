@@ -139,6 +139,11 @@ func NewJob(jobName string, spec *string, autoReloadSpec bool, cmd func(), multi
 	return j
 }
 
+// NewJobAndRegister 初始化一个Job配置 并注册
+func NewJobAndRegister(jobName string, spec *string, autoReloadSpec bool, cmd func(), multiRun ...bool) error {
+	return NewJob(jobName, spec, autoReloadSpec, cmd, multiRun...).Register()
+}
+
 // Register 注册该Job
 func (j *jobFunc) Register() error {
 	defer j.Unlock()
