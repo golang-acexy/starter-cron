@@ -99,10 +99,9 @@ func TestJobsFlushSpec(t *testing.T) {
 
 func TestJobAutoFlushSpec(t *testing.T) {
 	spec1 := "@every 1s"
-	task1 := cronmodule.NewJob("task1", &spec1, true, func() {
+	_ = cronmodule.NewJobAndRegister("task1", &spec1, true, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 	}, false)
-	_ = task1.Register()
 
 	go func() {
 		time.Sleep(time.Second * 5)
