@@ -29,13 +29,21 @@ type job struct {
 
 func (j *job) Run() {
 	if j.jobFunc == nil {
-		j.m.Lock()
-		defer j.m.Unlock()
+		var flag = j.m.TryLock()
+		if flag {
+			defer j.m.Unlock()
+		} else {
+			return
+		}
 		j.cmd()
 	} else {
 		if !j.jobFunc.multiRun {
-			j.m.Lock()
-			defer j.m.Unlock()
+			var flag = j.m.TryLock()
+			if flag {
+				defer j.m.Unlock()
+			} else {
+				return
+			}
 		}
 		j.cmd()
 		if j.jobFunc.autoReloadSpec {
