@@ -2,6 +2,8 @@ github.com/acexy/golang-toolkit v0.0.4 h1:0wgadmXeEMMf8p6buQ6z9PR75o63c4jaG/aug7
 github.com/acexy/golang-toolkit v0.0.4/go.mod h1:lpsZ8BAdHyq3e+S/34en4n5/QLV6nXLYqkesbukI7cI=
 github.com/acexy/golang-toolkit v0.0.6 h1:Fr3NdJyS82NuvPdpTj0fCUvMasOFFIsL4silX/pjspg=
 github.com/acexy/golang-toolkit v0.0.6/go.mod h1:Gg9CQCGN9noTf3zrwmGnO+0A0ZdOyVzF2LDhwoSvsLw=
+github.com/acexy/golang-toolkit v0.0.7 h1:zbTwDYI3y3YnWodHfXH8hJAgpdZlsHsr4W8PjTJxdrE=
+github.com/acexy/golang-toolkit v0.0.7/go.mod h1:SqY4lmhHjCjbcjJnq3J04OwQbGWWd6pQZ9uS+xPl7d8=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
