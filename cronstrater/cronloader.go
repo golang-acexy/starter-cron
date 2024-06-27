@@ -1,15 +1,15 @@
-package cronmodule
+package cronstrater
 
 import (
 	"errors"
 	"github.com/acexy/golang-toolkit/logger"
-	"github.com/golang-acexy/starter-parent/parentmodule/declaration"
+	"github.com/golang-acexy/starter-parent/parent"
 	"github.com/robfig/cron/v3"
 	"sync"
 	"time"
 )
 
-var instance *cron.Cron
+var cronInstance *cron.Cron
 
 var jobList = make(map[string]*jobInfo)
 
@@ -88,49 +88,46 @@ type jobFunc struct {
 	autoReloadSpec bool
 }
 
-type CronModule struct {
-	// 启动日志
+type CronStarter struct {
+	// 启动详细日志
 	EnableLogger bool
 
 	// 手动启动定时任务
+	// 如果手动启动需要手动调用cronstrater.Start()方法启动整个任务执行器
 	ManualStart bool
 }
 
-func (c *CronModule) ModuleConfig() *declaration.ModuleConfig {
-	return &declaration.ModuleConfig{
-		ModuleName:               "Cron",
-		UnregisterPriority:       10,
-		UnregisterAllowAsync:     true,
-		UnregisterMaxWaitSeconds: 60,
-	}
+func (c *CronStarter) Setting() *parent.Setting {
+	return parent.NewSetting("Cron-Starter", 10, true, time.Second*20, nil)
 }
 
-func (c *CronModule) Register() (interface{}, error) {
+func (c *CronStarter) Start() (interface{}, error) {
 	opts := make([]cron.Option, 0)
 	if c.EnableLogger {
 		opts = append(opts, cron.WithLogger(ll))
 	}
-	instance = cron.New(opts...)
+	cronInstance = cron.New(opts...)
 	if !c.ManualStart {
-		instance.Start()
+		cronInstance.Start()
 	}
-	return instance, nil
+	return cronInstance, nil
 }
 
-func (c *CronModule) Unregister(maxWaitSeconds uint) (bool, error) {
-	ctx := instance.Stop()
+func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool, err error) {
+	ctx := cronInstance.Stop()
 	select {
 	case <-ctx.Done():
 		logger.Logrus().Traceln("")
-		return true, nil
-	case <-time.After(time.Second * time.Duration(maxWaitSeconds)):
-		return false, errors.New("wait too long")
+		return true, true, nil
+	case <-time.After(maxWaitTime):
+		cronInstance.Start()
+		return false, true, errors.New("waiting for cron starter shutdown timeout")
 	}
 }
 
 // Start 启动已注册任务 如果CronModule.ManualStart = true时一定需要手动开启
 func Start() {
-	instance.Start()
+	cronInstance.Start()
 }
 
 // NewJob 初始化一个Job配置
@@ -160,7 +157,7 @@ func (j *jobFunc) Register() error {
 	if flag {
 		return errors.New("the job already exists : " + j.jobName)
 	}
-	id, err := instance.AddJob(*j.spec, &job{
+	id, err := cronInstance.AddJob(*j.spec, &job{
 		cmd:        j.cmd,
 		originSpec: *j.spec,
 		jobFunc:    j,
@@ -185,7 +182,7 @@ func (j *jobFunc) FlushSpec(spec string) error {
 	j.Unlock()
 	j.spec = &spec
 	j.autoReloadSpec = false
-	instance.Remove(*v.jobId)
+	cronInstance.Remove(*v.jobId)
 	delete(jobList, j.jobName)
 	return j.Register()
 }
@@ -198,21 +195,22 @@ func (j *jobFunc) Remove() error {
 	if !flag {
 		return errors.New("the job not exists : " + j.jobName)
 	}
-	instance.Remove(*v.jobId)
+	cronInstance.Remove(*v.jobId)
 	delete(jobList, j.jobName)
 	return nil
 }
 
 // AddSimpleJob 添加简单任务
 func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
-	return instance.AddFunc(spec, cmd)
+	return cronInstance.AddFunc(spec, cmd)
 }
 
 // AddSimpleSingletonJob 添加简单单例任务 该任务将忽略正在运行的任务的调度
 func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
-	return instance.AddJob(spec, &job{cmd: cmd})
+	return cronInstance.AddJob(spec, &job{cmd: cmd})
 }
 
-func RawInstance() *cron.Cron {
-	return instance
+// RawCron 获取原始的cron实例
+func RawCron() *cron.Cron {
+	return cronInstance
 }

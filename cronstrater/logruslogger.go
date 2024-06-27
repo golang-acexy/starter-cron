@@ -1,4 +1,4 @@
-package cronmodule
+package cronstrater
 
 import "github.com/acexy/golang-toolkit/logger"
 
