@@ -17,10 +17,15 @@ type CronStarter struct {
 	// 手动启动定时任务
 	// 如果手动启动需要手动调用cronstrater.Start()方法启动整个任务执行器
 	ManualStart bool
+
+	CornSetting *parent.Setting
 }
 
 func (c *CronStarter) Setting() *parent.Setting {
-	return parent.NewSetting("Cron-Starter", 10, true, time.Second*20, nil)
+	if c.CornSetting != nil {
+		return c.CornSetting
+	}
+	return parent.NewSetting("Cron-Starter", 10, false, time.Second*20, nil)
 }
 
 func (c *CronStarter) Start() (interface{}, error) {
