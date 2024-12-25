@@ -19,6 +19,8 @@ github.com/golang-acexy/starter-parent v0.1.10 h1:lntYQQdzHmQRZgkIoHvkKINnPyhwSU
 github.com/golang-acexy/starter-parent v0.1.10/go.mod h1:KGfWBuDvJwMlIbjrDRkaPZqqsZ5ilb+0HqFvohXdMWc=
 github.com/golang-acexy/starter-parent v0.1.11 h1:xN1TqerIPebuvyVziT+rjGvpFeqweAlm07555J1V3UI=
 github.com/golang-acexy/starter-parent v0.1.11/go.mod h1:PvAnMwNpja3gnv0kM0BnXazYZnszKkcnQU3GTTuE+p0=
+github.com/golang-acexy/starter-parent v0.1.12 h1:Q//6H9ZRFisZwSQa5eAAFc1IE8HzF2eo4hlcV50YBXM=
+github.com/golang-acexy/starter-parent v0.1.12/go.mod h1:PvAnMwNpja3gnv0kM0BnXazYZnszKkcnQU3GTTuE+p0=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
