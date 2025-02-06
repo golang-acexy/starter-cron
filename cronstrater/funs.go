@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/acexy/golang-toolkit/logger"
 	"github.com/robfig/cron/v3"
+	"runtime/debug"
 	"sync"
 )
 
@@ -24,6 +25,11 @@ type job struct {
 }
 
 func (j *job) Run() {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Logrus().Errorln("job run error", err, "job name:", j.jobFunc.jobName, string(debug.Stack()))
+		}
+	}()
 	if j.jobFunc == nil {
 		var flag = j.m.TryLock()
 		if flag {
@@ -48,7 +54,6 @@ func (j *job) Run() {
 			}
 		}
 	}
-
 }
 
 func (j *job) flushSpec() {
@@ -156,10 +161,26 @@ func (j *jobFunc) Remove() error {
 
 // AddSimpleJob 添加简单任务
 func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
-	return cronInstance.AddFunc(spec, cmd)
+	var fn = func() {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Logrus().Errorln("job run error", err, string(debug.Stack()))
+			}
+		}()
+		cmd()
+	}
+	return cronInstance.AddFunc(spec, fn)
 }
 
 // AddSimpleSingletonJob 添加简单单例任务 该任务将忽略正在运行的任务的调度
 func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
-	return cronInstance.AddJob(spec, &job{cmd: cmd})
+	var fn = func() {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Logrus().Errorln("job run error", err, string(debug.Stack()))
+			}
+		}()
+		cmd()
+	}
+	return cronInstance.AddJob(spec, &job{cmd: fn})
 }

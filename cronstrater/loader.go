@@ -2,7 +2,6 @@ package cronstrater
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/logger"
 	"github.com/golang-acexy/starter-parent/parent"
 	"github.com/robfig/cron/v3"
 	"time"
@@ -44,7 +43,6 @@ func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool,
 	ctx := cronInstance.Stop()
 	select {
 	case <-ctx.Done():
-		logger.Logrus().Traceln("")
 		return true, true, nil
 	case <-time.After(maxWaitTime):
 		cronInstance.Start()
