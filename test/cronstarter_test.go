@@ -6,7 +6,6 @@ import (
 	"github.com/acexy/golang-toolkit/util/json"
 	"github.com/golang-acexy/starter-cron/cronstrater"
 	"github.com/golang-acexy/starter-parent/parent"
-	"github.com/sirupsen/logrus"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,8 +16,7 @@ var count1 int32
 var count2 int32
 
 func init() {
-	l := &logger.LogrusConfig{}
-	l.EnableConsole(logrus.TraceLevel, false)
+	logger.EnableConsole(logger.TraceLevel, false)
 	starterLoader = parent.NewStarterLoader([]parent.Starter{
 		&cronstrater.CronStarter{
 			EnableLogger: false,
@@ -46,6 +44,8 @@ func TestAddSimpleJob(t *testing.T) {
 		time.Sleep(time.Second * 5)
 		atomic.AddInt32(&count2, 1)
 		fmt.Println(time.Now().Format("15:04:05"), "执行完成")
+		var i int
+		fmt.Println(1 / i)
 	})
 	time.Sleep(time.Second * 30)
 	fmt.Println("init func invoke count", count1, "AddJob invoke count", count2)
