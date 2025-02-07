@@ -3,12 +3,26 @@ package cronstrater
 import (
 	"errors"
 	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/util/coll"
 	"github.com/robfig/cron/v3"
 	"runtime/debug"
+	"strings"
 	"sync"
 )
 
 var jobList = make(map[string]*jobInfo)
+
+func filterStack(stack string) string {
+	lines := strings.Split(stack, "\n")
+	index := coll.SliceAnyIndexOf(lines, func(line string) bool {
+		return strings.Contains(line, "runtime/panic.go")
+	})
+	filter := lines[index:]
+	index = coll.SliceAnyIndexOf(filter, func(line string) bool {
+		return strings.Contains(line, "cronstrater/funs.go")
+	})
+	return strings.Join(filter[:index], "\n")
+}
 
 type jobInfo struct {
 	jobId   *cron.EntryID
@@ -27,7 +41,7 @@ type job struct {
 func (j *job) Run() {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Logrus().Errorln("job run error", err, "job name:", j.jobFunc.jobName, string(debug.Stack()))
+			logger.Logrus().Errorln("job run error", err, "job name:", j.jobFunc.jobName, filterStack(string(debug.Stack())))
 		}
 	}()
 	if j.jobFunc == nil {
@@ -164,7 +178,7 @@ func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 	var fn = func() {
 		defer func() {
 			if err := recover(); err != nil {
-				logger.Logrus().Errorln("job run error", err, string(debug.Stack()))
+				logger.Logrus().Errorln("job run error", err, filterStack(string(debug.Stack())))
 			}
 		}()
 		cmd()
@@ -177,7 +191,7 @@ func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
 	var fn = func() {
 		defer func() {
 			if err := recover(); err != nil {
-				logger.Logrus().Errorln("job run error", err, string(debug.Stack()))
+				logger.Logrus().Errorln("job run error", err, filterStack(string(debug.Stack())))
 			}
 		}()
 		cmd()
