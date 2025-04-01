@@ -19,7 +19,7 @@ func init() {
 	logger.EnableConsole(logger.TraceLevel, false)
 	starterLoader = parent.NewStarterLoader([]parent.Starter{
 		&cronstrater.CronStarter{
-			EnableLogger: false,
+			Config: cronstrater.CronConfig{EnableLogger: true},
 		},
 	})
 	err := starterLoader.Start()
