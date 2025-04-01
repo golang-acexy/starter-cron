@@ -8,6 +8,7 @@ import (
 )
 
 var cronInstance *cron.Cron
+var cronConfig *CronConfig
 
 type CronConfig struct {
 	// 启动详细日志
@@ -22,21 +23,20 @@ type CronStarter struct {
 	Config     CronConfig
 	LazyConfig func() CronConfig
 
-	config      *CronConfig
 	CornSetting *parent.Setting
 }
 
 func (c *CronStarter) getConfig() *CronConfig {
-	if c.config == nil {
+	if cronConfig == nil {
 		var config CronConfig
 		if c.LazyConfig != nil {
 			config = c.LazyConfig()
 		} else {
 			config = c.Config
 		}
-		c.config = &config
+		cronConfig = &config
 	}
-	return c.config
+	return cronConfig
 }
 
 func (c *CronStarter) Setting() *parent.Setting {
