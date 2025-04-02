@@ -4,7 +4,7 @@ go 1.23.5
 
 require (
 	github.com/acexy/golang-toolkit v0.0.44
-	github.com/golang-acexy/starter-parent v0.1.14
+	github.com/golang-acexy/starter-parent v0.1.15
 	github.com/robfig/cron/v3 v3.0.1
 )
 

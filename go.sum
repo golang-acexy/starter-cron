@@ -3,8 +3,8 @@ github.com/acexy/golang-toolkit v0.0.44/go.mod h1:He833/0n/wP1Ij/osLIazvdwlrIxT8
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/golang-acexy/starter-parent v0.1.14 h1:UbFGUpiRDuh1hXRg5dY3sCgAJ+MUZOnu1UxbqJr34rg=
-github.com/golang-acexy/starter-parent v0.1.14/go.mod h1:iWg08DKgDSGqsUjAPPoNghR/8p6zhT3FdEFOygyrSwM=
+github.com/golang-acexy/starter-parent v0.1.15 h1:poaYgB7hNXU1/jgOZrj78if27E+Gd1FTlaupR9qNLnE=
+github.com/golang-acexy/starter-parent v0.1.15/go.mod h1:iWg08DKgDSGqsUjAPPoNghR/8p6zhT3FdEFOygyrSwM=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
