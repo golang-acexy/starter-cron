@@ -8,7 +8,6 @@ import (
 )
 
 var cronInstance *cron.Cron
-var cronConfig *CronConfig
 
 type CronConfig struct {
 	// 启动详细日志
@@ -20,23 +19,23 @@ type CronConfig struct {
 }
 
 type CronStarter struct {
-	Config     CronConfig
-	LazyConfig func() CronConfig
-
+	Config      CronConfig
+	LazyConfig  func() CronConfig
+	config      *CronConfig
 	CornSetting *parent.Setting
 }
 
 func (c *CronStarter) getConfig() *CronConfig {
-	if cronConfig == nil {
+	if c.config == nil {
 		var config CronConfig
 		if c.LazyConfig != nil {
 			config = c.LazyConfig()
 		} else {
 			config = c.Config
 		}
-		cronConfig = &config
+		c.config = &config
 	}
-	return cronConfig
+	return c.config
 }
 
 func (c *CronStarter) Setting() *parent.Setting {
@@ -70,7 +69,7 @@ func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool,
 	}
 }
 
-// Start 启动已注册任务 如果CronModule.ManualStart = true时一定需要手动开启
+// Start 启动已注册任务 如果CronModule.ManualStart = true 时一定需要手动开启
 func Start() {
 	cronInstance.Start()
 }
