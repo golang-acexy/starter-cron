@@ -19,7 +19,7 @@ func filterStack(stack string) string {
 	})
 	filter := lines[index:]
 	index = coll.SliceAnyIndexOf(filter, func(line string) bool {
-		return strings.Contains(line, "cronstrater/funs.go")
+		return strings.Contains(line, "cronstrater/func.go")
 	})
 	return strings.Join(filter[:index], "\n")
 }

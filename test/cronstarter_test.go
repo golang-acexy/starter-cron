@@ -3,6 +3,7 @@ package test
 import (
 	"fmt"
 	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/sys"
 	"github.com/acexy/golang-toolkit/util/json"
 	"github.com/golang-acexy/starter-cron/cronstrater"
 	"github.com/golang-acexy/starter-parent/parent"
@@ -19,7 +20,7 @@ func init() {
 	logger.EnableConsole(logger.TraceLevel, false)
 	starterLoader = parent.NewStarterLoader([]parent.Starter{
 		&cronstrater.CronStarter{
-			EnableLogger: false,
+			Config: cronstrater.CronConfig{EnableLogger: true},
 		},
 	})
 	err := starterLoader.Start()
@@ -29,7 +30,7 @@ func init() {
 	}
 }
 func TestLoadAndUnLoad(t *testing.T) {
-	cronstrater.Start() // z忽略重复启动
+	cronstrater.Start() // 忽略重复启动
 	stopResult, err := starterLoader.Stop(time.Second * 10)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
@@ -47,7 +48,7 @@ func TestAddSimpleJob(t *testing.T) {
 		var i int
 		fmt.Println(1 / i)
 	})
-	time.Sleep(time.Second * 30)
+	sys.ShutdownHolding()
 	fmt.Println("init func invoke count", count1, "AddJob invoke count", count2)
 }
 
@@ -58,7 +59,7 @@ func TestAddSimpleSingletonJob(t *testing.T) {
 		atomic.AddInt32(&count2, 1)
 		fmt.Println(time.Now().Format("15:04:05"), "执行完成")
 	})
-	time.Sleep(time.Second * 30)
+	sys.ShutdownHolding()
 	fmt.Println("init func invoke count", count1, "AddJob invoke count", count2)
 }
 
