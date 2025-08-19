@@ -2,14 +2,15 @@ package test
 
 import (
 	"fmt"
-	"github.com/acexy/golang-toolkit/logger"
-	"github.com/acexy/golang-toolkit/sys"
-	"github.com/acexy/golang-toolkit/util/json"
-	"github.com/golang-acexy/starter-cron/cronstrater"
-	"github.com/golang-acexy/starter-parent/parent"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/sys"
+	"github.com/acexy/golang-toolkit/util/json"
+	"github.com/golang-acexy/starter-cron/cronstarter"
+	"github.com/golang-acexy/starter-parent/parent"
 )
 
 var starterLoader *parent.StarterLoader
@@ -19,8 +20,8 @@ var count2 int32
 func init() {
 	logger.EnableConsole(logger.TraceLevel, false)
 	starterLoader = parent.NewStarterLoader([]parent.Starter{
-		&cronstrater.CronStarter{
-			Config: cronstrater.CronConfig{EnableLogger: true},
+		&cronstarter.CronStarter{
+			Config: cronstarter.CronConfig{EnableLogger: true},
 		},
 	})
 	err := starterLoader.Start()
@@ -30,7 +31,7 @@ func init() {
 	}
 }
 func TestLoadAndUnLoad(t *testing.T) {
-	cronstrater.Start() // 忽略重复启动
+	cronstarter.Start() // 忽略重复启动
 	stopResult, err := starterLoader.Stop(time.Second * 10)
 	if err != nil {
 		fmt.Printf("%+v\n", err)
@@ -40,7 +41,7 @@ func TestLoadAndUnLoad(t *testing.T) {
 }
 
 func TestAddSimpleJob(t *testing.T) {
-	cronstrater.AddSimpleJob("@every 1s", func() {
+	cronstarter.AddSimpleJob("@every 1s", func() {
 		fmt.Println(time.Now().Format("15:04:05"), "执行中")
 		time.Sleep(time.Second * 5)
 		atomic.AddInt32(&count2, 1)
@@ -53,7 +54,7 @@ func TestAddSimpleJob(t *testing.T) {
 }
 
 func TestAddSimpleSingletonJob(t *testing.T) {
-	cronstrater.AddSimpleSingletonJob("@every 1s", func() {
+	cronstarter.AddSimpleSingletonJob("@every 1s", func() {
 		fmt.Println(time.Now().Format("15:04:05"), "执行中")
 		time.Sleep(time.Second * 5)
 		atomic.AddInt32(&count2, 1)
@@ -65,7 +66,7 @@ func TestAddSimpleSingletonJob(t *testing.T) {
 
 func TestJobFlushSpec(t *testing.T) {
 	spec1 := "@every 1s"
-	task1 := cronstrater.NewJob("task1", &spec1, false, func() {
+	task1 := cronstarter.NewJob("task1", &spec1, false, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 		time.Sleep(time.Second * 2)
 	}, true)
@@ -85,11 +86,11 @@ func TestJobsFlushSpec(t *testing.T) {
 	spec1 := "@every 1s"
 	spec2 := "@every 1s"
 
-	task1 := cronstrater.NewJob("task1", &spec1, false, func() {
+	task1 := cronstarter.NewJob("task1", &spec1, false, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 	})
 
-	task2 := cronstrater.NewJob("task2", &spec2, false, func() {
+	task2 := cronstarter.NewJob("task2", &spec2, false, func() {
 		fmt.Println("task2 invoke", time.Now().Format("15:04:05"))
 		time.Sleep(2 * time.Second)
 	}, true)
@@ -106,7 +107,7 @@ func TestJobsFlushSpec(t *testing.T) {
 
 func TestJobAutoFlushSpec(t *testing.T) {
 	spec1 := "@every 1s"
-	_ = cronstrater.NewJobAndRegister("task1", &spec1, true, func() {
+	_ = cronstarter.NewJobAndRegister("task1", &spec1, true, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 	}, false)
 

@@ -1,13 +1,14 @@
-package cronstrater
+package cronstarter
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/logger"
-	"github.com/acexy/golang-toolkit/util/coll"
-	"github.com/robfig/cron/v3"
 	"runtime/debug"
 	"strings"
 	"sync"
+
+	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/util/coll"
+	"github.com/robfig/cron/v3"
 )
 
 var jobList = make(map[string]*jobInfo)

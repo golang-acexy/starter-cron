@@ -1,10 +1,11 @@
-package cronstrater
+package cronstarter
 
 import (
 	"errors"
+	"time"
+
 	"github.com/golang-acexy/starter-parent/parent"
 	"github.com/robfig/cron/v3"
-	"time"
 )
 
 var cronInstance *cron.Cron
