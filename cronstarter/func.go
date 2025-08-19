@@ -130,7 +130,10 @@ func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string
 	var flushSpec string
 	flushSpec = spec
 	cmdWrap := func() {
-		flushSpec = cmd()
+		newSpec := cmd()
+		if newSpec != "" {
+			flushSpec = newSpec
+		}
 	}
 	return NewJob(jobName, &flushSpec, true, cmdWrap, multiRun...).Register()
 }
