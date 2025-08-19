@@ -123,14 +123,13 @@ func NewJobAndRegister(jobName string, spec *string, autoReloadSpec bool, cmd fu
 	return NewJob(jobName, spec, autoReloadSpec, cmd, multiRun...).Register()
 }
 
-// NewJobAndRegisterWithSpec 初始化一个Job配置 并注册 (刷新spec)
-func NewJobAndRegisterWithSpec(jobName string, spec string, cmd func() string, multiRun ...bool) error {
+// NewJobAndRegisterWithNewSpec 初始化一个Job配置 并注册 (刷新spec)
+func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string, multiRun ...bool) error {
 	var flushSpec string
 	flushSpec = spec
 	cmdWrap := func() {
 		flushSpec = cmd()
 	}
-	flushSpec = cmd()
 	return NewJob(jobName, &flushSpec, true, cmdWrap, multiRun...).Register()
 }
 
