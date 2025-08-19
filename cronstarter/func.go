@@ -11,6 +11,8 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+var locker sync.Mutex
+
 var jobList = make(map[string]*jobInfo)
 
 func filterStack(stack string) string {
@@ -131,6 +133,21 @@ func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string
 		flushSpec = cmd()
 	}
 	return NewJob(jobName, &flushSpec, true, cmdWrap, multiRun...).Register()
+}
+
+// RemoveJob 移除任务
+func RemoveJob(jobName string) {
+	locker.Lock()
+	defer locker.Unlock()
+	j, flag := jobList[jobName]
+	if !flag {
+		logger.Logrus().Warning("job not exists:", jobName)
+		return
+	}
+	err := j.jobFunc.Remove()
+	if err != nil {
+		logger.Logrus().WithError(err).Errorln("remove job error", jobName, err)
+	}
 }
 
 // Register 注册该Job
