@@ -1,14 +1,17 @@
-package cronstrater
+package cronstarter
 
 import (
 	"errors"
-	"github.com/acexy/golang-toolkit/logger"
-	"github.com/acexy/golang-toolkit/util/coll"
-	"github.com/robfig/cron/v3"
 	"runtime/debug"
 	"strings"
 	"sync"
+
+	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/util/coll"
+	"github.com/robfig/cron/v3"
 )
+
+var locker sync.Mutex
 
 var jobList = make(map[string]*jobInfo)
 
@@ -120,6 +123,34 @@ func NewJob(jobName string, spec *string, autoReloadSpec bool, cmd func(), multi
 // NewJobAndRegister 初始化一个Job配置 并注册
 func NewJobAndRegister(jobName string, spec *string, autoReloadSpec bool, cmd func(), multiRun ...bool) error {
 	return NewJob(jobName, spec, autoReloadSpec, cmd, multiRun...).Register()
+}
+
+// NewJobAndRegisterWithNewSpec 初始化一个Job配置 并注册 (刷新spec)
+func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string, multiRun ...bool) error {
+	var flushSpec string
+	flushSpec = spec
+	cmdWrap := func() {
+		newSpec := cmd()
+		if newSpec != "" {
+			flushSpec = newSpec
+		}
+	}
+	return NewJob(jobName, &flushSpec, true, cmdWrap, multiRun...).Register()
+}
+
+// RemoveJob 移除任务
+func RemoveJob(jobName string) {
+	locker.Lock()
+	defer locker.Unlock()
+	j, flag := jobList[jobName]
+	if !flag {
+		logger.Logrus().Warning("job not exists:", jobName)
+		return
+	}
+	err := j.jobFunc.Remove()
+	if err != nil {
+		logger.Logrus().WithError(err).Errorln("remove job error", jobName, err)
+	}
 }
 
 // Register 注册该Job
