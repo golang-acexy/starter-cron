@@ -50,7 +50,7 @@ func (c *CronStarter) Start() (interface{}, error) {
 	config := c.getConfig()
 	opts := make([]cron.Option, 0)
 	if config.EnableLogger {
-		opts = append(opts, cron.WithLogger(ll))
+		opts = append(opts, cron.WithLogger(log))
 	}
 	cronInstance = cron.New(opts...)
 	if !config.ManualStart {

@@ -2,7 +2,7 @@ package cronstarter
 
 import "github.com/acexy/golang-toolkit/logger"
 
-var ll = &logrusLoggger{}
+var log = &logrusLoggger{}
 
 type logrusLoggger struct {
 }
