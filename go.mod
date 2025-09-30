@@ -3,8 +3,8 @@ module github.com/golang-acexy/starter-cron
 go 1.24.6
 
 require (
-	github.com/acexy/golang-toolkit v0.0.53-0.20250928081151-2f67c5914ee7
-	github.com/golang-acexy/starter-parent v0.1.19-0.20250928072523-a44bd6e96aa5
+	github.com/acexy/golang-toolkit v0.0.53
+	github.com/golang-acexy/starter-parent v0.1.19
 	github.com/robfig/cron/v3 v3.0.1
 )
 
