@@ -46,7 +46,7 @@ func (c *CronStarter) Setting() *parent.Setting {
 	return parent.NewSetting("Cron-Starter", 10, false, time.Second*20, nil)
 }
 
-func (c *CronStarter) Start() (interface{}, error) {
+func (c *CronStarter) Start() (any, error) {
 	config := c.getConfig()
 	opts := make([]cron.Option, 0)
 	if config.EnableLogger {
