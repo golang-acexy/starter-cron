@@ -1,7 +1,7 @@
 package cronstarter
 
 import (
-	"errors"
+	"sync"
 	"time"
 
 	"github.com/golang-acexy/starter-parent/parent"
@@ -9,13 +9,14 @@ import (
 )
 
 var cronInstance *cron.Cron
+var cronInstanceLock sync.RWMutex
 
 type CronConfig struct {
 	// 启动详细日志
 	EnableLogger bool
 
 	// 手动启动定时任务
-	// 如果手动启动需要手动调用cronstrater.Start()方法启动整个任务执行器
+	// 如果手动启动需要手动调用cronstarter.Start()方法启动整个任务执行器
 	ManualStart bool
 }
 
@@ -23,7 +24,7 @@ type CronStarter struct {
 	Config      CronConfig
 	LazyConfig  func() CronConfig
 	config      *CronConfig
-	CornSetting *parent.Setting
+	CronSetting *parent.Setting
 }
 
 func (c *CronStarter) getConfig() *CronConfig {
@@ -40,8 +41,8 @@ func (c *CronStarter) getConfig() *CronConfig {
 }
 
 func (c *CronStarter) Setting() *parent.Setting {
-	if c.CornSetting != nil {
-		return c.CornSetting
+	if c.CronSetting != nil {
+		return c.CronSetting
 	}
 	return parent.NewSetting("Cron-Starter", 10, false, time.Second*20, nil)
 }
@@ -52,30 +53,53 @@ func (c *CronStarter) Start() (any, error) {
 	if config.EnableLogger {
 		opts = append(opts, cron.WithLogger(log))
 	}
-	cronInstance = cron.New(opts...)
+	instance := cron.New(opts...)
+	cronInstanceLock.Lock()
+	cronInstance = instance
+	cronInstanceLock.Unlock()
 	if !config.ManualStart {
-		cronInstance.Start()
+		instance.Start()
 	}
-	return cronInstance, nil
+	return instance, nil
 }
 
 func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool, err error) {
-	ctx := cronInstance.Stop()
+	instance, err := getCronInstance()
+	if err != nil {
+		return false, true, err
+	}
+	ctx := instance.Stop()
 	select {
 	case <-ctx.Done():
 		return true, true, nil
 	case <-time.After(maxWaitTime):
-		cronInstance.Start()
-		return false, true, errors.New("waiting for cron starter shutdown timeout")
+		instance.Start()
+		return false, true, ErrCronStopTimeout
 	}
 }
 
 // Start 启动已注册任务 如果CronModule.ManualStart = true 时一定需要手动开启
-func Start() {
-	cronInstance.Start()
+func Start() error {
+	instance, err := getCronInstance()
+	if err != nil {
+		return err
+	}
+	instance.Start()
+	return nil
 }
 
 // RawCron 获取原始的cron实例
 func RawCron() *cron.Cron {
+	cronInstanceLock.RLock()
+	defer cronInstanceLock.RUnlock()
 	return cronInstance
+}
+
+func getCronInstance() (*cron.Cron, error) {
+	cronInstanceLock.RLock()
+	defer cronInstanceLock.RUnlock()
+	if cronInstance == nil {
+		return nil, ErrCronStarterNotStarted
+	}
+	return cronInstance, nil
 }

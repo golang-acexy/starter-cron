@@ -9,7 +9,7 @@
 - 新增支持同一任务执行中忽略下次调度设置
 ```go
 func TestAddSimpleSingletonJob(t *testing.T) {
-	cronstrater.AddSimpleSingletonJob("@every 1s", func() {
+	cronstarter.AddSimpleSingletonJob("@every 1s", func() {
 		fmt.Println(time.Now().Format("15:04:05"), "执行中")
 		time.Sleep(time.Second * 5)
 		atomic.AddInt32(&count2, 1)
@@ -26,11 +26,11 @@ func TestJobsFlushSpec(t *testing.T) {
 	spec1 := "@every 1s"
 	spec2 := "@every 1s"
 
-	task1 := cronstrater.NewJob("task1", &spec1, false, func() {
+	task1 := cronstarter.NewJob("task1", &spec1, false, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 	})
 
-	task2 := cronstrater.NewJob("task2", &spec2, false, func() {
+	task2 := cronstarter.NewJob("task2", &spec2, false, func() {
 		fmt.Println("task2 invoke", time.Now().Format("15:04:05"))
 		time.Sleep(2 * time.Second)
 	}, true)
@@ -47,7 +47,7 @@ func TestJobsFlushSpec(t *testing.T) {
 
 func TestJobAutoFlushSpec(t *testing.T) {
 	spec1 := "@every 1s"
-	_ = cronstrater.NewJobAndRegister("task1", &spec1, true, func() {
+	_ = cronstarter.NewJobAndRegister("task1", &spec1, true, func() {
 		fmt.Println("task1 invoke", time.Now().Format("15:04:05"))
 	}, false)
 
