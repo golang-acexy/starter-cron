@@ -2,9 +2,15 @@
 
 `starter-cron` is the scheduled job starter for the golang-acexy starter/cloud ecosystem. It wraps `github.com/robfig/cron/v3` and provides starter-managed lifecycle, safe job registration, singleton job execution, and dynamic schedule refresh.
 
+## Ecosystem Role
+
+This starter owns scheduled-task infrastructure. Business code registers jobs through its focused APIs, while `starter-parent` controls scheduler startup and shutdown with the rest of the application.
+
 ## Requirements
 
 Current module Go version: `1.25.8`.
+
+## Installation
 
 ```bash
 go get github.com/golang-acexy/starter-cron
@@ -88,6 +94,8 @@ spec = "@every 2m"
 - `NewJobAndRegister(...)` creates and registers a named job.
 - `RemoveJob(name)` removes a registered named job.
 
-## Notes
+## Lifecycle and Design Notes
 
 Register jobs only after the starter has been initialized by parent. Calls made before startup return `ErrCronStarterNotStarted`.
+
+The scheduler is process-wide. `ManualStart` delays scheduling but does not bypass parent initialization. The standard Cron starter does not allow parent-managed restart after successful shutdown.

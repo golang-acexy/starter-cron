@@ -44,7 +44,7 @@ func (c *CronStarter) Setting() *parent.Setting {
 	if c.CronSetting != nil {
 		return c.CronSetting
 	}
-	return parent.NewSetting("Cron-Starter", 10, false, time.Second*20, nil)
+	return parent.NewSetting("Cron-Starter", false, 10, false, time.Second*20, nil)
 }
 
 func (c *CronStarter) Start() (any, error) {
