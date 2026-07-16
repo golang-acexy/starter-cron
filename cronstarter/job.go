@@ -1,30 +1,39 @@
 package cronstarter
 
 import (
-	"errors"
+	"fmt"
 	"runtime/debug"
 	"strings"
 	"sync"
 
 	"github.com/acexy/golang-toolkit/logger"
-	"github.com/acexy/golang-toolkit/util/coll"
 	"github.com/robfig/cron/v3"
 )
 
-var locker sync.Mutex
+var jobListLock sync.Mutex
 
 var jobList = make(map[string]*jobInfo)
 
 func filterStack(stack string) string {
 	lines := strings.Split(stack, "\n")
-	index := coll.SliceAnyIndexOf(lines, func(line string) bool {
-		return strings.Contains(line, "runtime/panic.go")
-	})
-	filter := lines[index:]
-	index = coll.SliceAnyIndexOf(filter, func(line string) bool {
-		return strings.Contains(line, "cronstrater/func.go")
-	})
-	return strings.Join(filter[:index], "\n")
+	start := 0
+	for i, line := range lines {
+		if strings.Contains(line, "runtime/panic.go") {
+			start = i
+			break
+		}
+	}
+	end := len(lines)
+	for i := start; i < len(lines); i++ {
+		if strings.Contains(lines[i], "cronstarter/job.go") {
+			end = i
+			break
+		}
+	}
+	if start >= end {
+		return strings.Join(lines[start:], "\n")
+	}
+	return strings.Join(lines[start:end], "\n")
 }
 
 type jobInfo struct {
@@ -44,7 +53,11 @@ type job struct {
 func (j *job) Run() {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Logrus().Errorln("job run error", err, "job name:", j.jobFunc.jobName, filterStack(string(debug.Stack())))
+			jobName := "unnamed"
+			if j.jobFunc != nil {
+				jobName = j.jobFunc.jobName
+			}
+			logger.Logrus().Errorln("job run error", err, "job name:", jobName, filterStack(string(debug.Stack())))
 		}
 	}()
 	if j.jobFunc == nil {
@@ -65,7 +78,7 @@ func (j *job) Run() {
 			}
 		}
 		j.cmd()
-		if j.jobFunc.autoReloadSpec {
+		if j.jobFunc.autoReloadSpec && j.jobFunc.spec != nil {
 			if j.originSpec != *j.jobFunc.spec {
 				go j.flushSpec()
 			}
@@ -140,9 +153,9 @@ func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string
 
 // RemoveJob 移除任务
 func RemoveJob(jobName string) {
-	locker.Lock()
-	defer locker.Unlock()
+	jobListLock.Lock()
 	j, flag := jobList[jobName]
+	jobListLock.Unlock()
 	if !flag {
 		logger.Logrus().Warning("job not exists:", jobName)
 		return
@@ -157,11 +170,20 @@ func RemoveJob(jobName string) {
 func (j *jobFunc) Register() error {
 	defer j.Unlock()
 	j.Lock()
+	if j.spec == nil {
+		return fmt.Errorf("%w: %s", ErrJobSpecNil, j.jobName)
+	}
+	instance, err := getCronInstance()
+	if err != nil {
+		return err
+	}
+	jobListLock.Lock()
+	defer jobListLock.Unlock()
 	_, flag := jobList[j.jobName]
 	if flag {
-		return errors.New("the job already exists : " + j.jobName)
+		return fmt.Errorf("%w: %s", ErrJobAlreadyExists, j.jobName)
 	}
-	id, err := cronInstance.AddJob(*j.spec, &job{
+	id, err := instance.AddJob(*j.spec, &job{
 		cmd:        j.cmd,
 		originSpec: *j.spec,
 		jobFunc:    j,
@@ -178,34 +200,62 @@ func (j *jobFunc) Register() error {
 
 // FlushSpec 更改Job规则 该操作将自动关闭 autoReloadSpec
 func (j *jobFunc) FlushSpec(spec string) error {
+	defer j.Unlock()
 	j.Lock()
+	instance, err := getCronInstance()
+	if err != nil {
+		return err
+	}
+	jobListLock.Lock()
+	defer jobListLock.Unlock()
 	v, flag := jobList[j.jobName]
 	if !flag {
-		return errors.New("the job not exists : " + j.jobName)
+		return fmt.Errorf("%w: %s", ErrJobNotExists, j.jobName)
 	}
-	j.Unlock()
 	j.spec = &spec
 	j.autoReloadSpec = false
-	cronInstance.Remove(*v.jobId)
+	instance.Remove(*v.jobId)
 	delete(jobList, j.jobName)
-	return j.Register()
+	id, err := instance.AddJob(spec, &job{
+		cmd:        j.cmd,
+		originSpec: spec,
+		jobFunc:    j,
+	})
+	if err != nil {
+		return err
+	}
+	jobList[j.jobName] = &jobInfo{
+		jobId:   &id,
+		jobFunc: j,
+	}
+	return nil
 }
 
 // Remove 移除任务
 func (j *jobFunc) Remove() error {
 	defer j.Unlock()
 	j.Lock()
+	instance, err := getCronInstance()
+	if err != nil {
+		return err
+	}
+	jobListLock.Lock()
+	defer jobListLock.Unlock()
 	v, flag := jobList[j.jobName]
 	if !flag {
-		return errors.New("the job not exists : " + j.jobName)
+		return fmt.Errorf("%w: %s", ErrJobNotExists, j.jobName)
 	}
-	cronInstance.Remove(*v.jobId)
+	instance.Remove(*v.jobId)
 	delete(jobList, j.jobName)
 	return nil
 }
 
 // AddSimpleJob 添加简单任务
 func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
+	instance, err := getCronInstance()
+	if err != nil {
+		return 0, err
+	}
 	var fn = func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -214,11 +264,15 @@ func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 		}()
 		cmd()
 	}
-	return cronInstance.AddFunc(spec, fn)
+	return instance.AddFunc(spec, fn)
 }
 
 // AddSimpleSingletonJob 添加简单单例任务 该任务将忽略正在运行的任务的调度
 func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
+	instance, err := getCronInstance()
+	if err != nil {
+		return 0, err
+	}
 	var fn = func() {
 		defer func() {
 			if err := recover(); err != nil {
@@ -227,5 +281,5 @@ func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
 		}()
 		cmd()
 	}
-	return cronInstance.AddJob(spec, &job{cmd: fn})
+	return instance.AddJob(spec, &job{cmd: fn})
 }
