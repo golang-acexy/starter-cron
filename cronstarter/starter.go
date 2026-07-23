@@ -14,6 +14,10 @@ var cronInstanceLock sync.RWMutex
 type CronConfig struct {
 	// 启动详细日志
 	EnableLogger bool
+	// 时区
+	Location *time.Location
+	// 启用包含秒字段的 Cron 表达式
+	WithSeconds bool
 
 	// 手动启动定时任务
 	// 如果手动启动需要手动调用cronstarter.Start()方法启动整个任务执行器
@@ -52,6 +56,12 @@ func (c *CronStarter) Start() (any, error) {
 	opts := make([]cron.Option, 0)
 	if config.EnableLogger {
 		opts = append(opts, cron.WithLogger(log))
+	}
+	if config.Location != nil {
+		opts = append(opts, cron.WithLocation(config.Location))
+	}
+	if config.WithSeconds {
+		opts = append(opts, cron.WithSeconds())
 	}
 	instance := cron.New(opts...)
 	cronInstanceLock.Lock()
