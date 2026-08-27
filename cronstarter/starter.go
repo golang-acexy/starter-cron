@@ -2,14 +2,16 @@ package cronstarter
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang-acexy/starter-parent/parent"
 	"github.com/robfig/cron/v3"
 )
 
-var cronInstance *cron.Cron
-var cronInstanceLock sync.RWMutex
+var cronInstance atomic.Pointer[cron.Cron]
+var cronLifecycleLock sync.Mutex
+var cronStopping atomic.Bool
 
 type CronConfig struct {
 	// 启动详细日志
@@ -28,11 +30,12 @@ type CronStarter struct {
 	Config      CronConfig
 	LazyConfig  func() CronConfig
 	config      *CronConfig
+	configOnce  sync.Once
 	CronSetting *parent.Setting
 }
 
 func (c *CronStarter) getConfig() *CronConfig {
-	if c.config == nil {
+	c.configOnce.Do(func() {
 		var config CronConfig
 		if c.LazyConfig != nil {
 			config = c.LazyConfig()
@@ -40,7 +43,7 @@ func (c *CronStarter) getConfig() *CronConfig {
 			config = c.Config
 		}
 		c.config = &config
-	}
+	})
 	return c.config
 }
 
@@ -52,6 +55,11 @@ func (c *CronStarter) Setting() *parent.Setting {
 }
 
 func (c *CronStarter) Start() (any, error) {
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
+	if cronInstance.Load() != nil || cronStopping.Load() {
+		return cronInstance.Load(), ErrCronStarterAlreadyStarted
+	}
 	config := c.getConfig()
 	opts := make([]cron.Option, 0)
 	if config.EnableLogger {
@@ -64,9 +72,7 @@ func (c *CronStarter) Start() (any, error) {
 		opts = append(opts, cron.WithSeconds())
 	}
 	instance := cron.New(opts...)
-	cronInstanceLock.Lock()
-	cronInstance = instance
-	cronInstanceLock.Unlock()
+	cronInstance.Store(instance)
 	if !config.ManualStart {
 		instance.Start()
 	}
@@ -74,16 +80,29 @@ func (c *CronStarter) Start() (any, error) {
 }
 
 func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool, err error) {
-	instance, err := getCronInstance()
-	if err != nil {
-		return false, true, err
+	cronLifecycleLock.Lock()
+	instance := cronInstance.Swap(nil)
+	if instance == nil {
+		cronLifecycleLock.Unlock()
+		return false, true, ErrCronStarterNotStarted
 	}
+	cronStopping.Store(true)
+	cronLifecycleLock.Unlock()
 	ctx := instance.Stop()
+	jobListLock.Lock()
+	jobList = make(map[string]*jobInfo)
+	jobListLock.Unlock()
+	timer := time.NewTimer(maxWaitTime)
+	defer timer.Stop()
 	select {
 	case <-ctx.Done():
+		cronStopping.Store(false)
 		return true, true, nil
-	case <-time.After(maxWaitTime):
-		instance.Start()
+	case <-timer.C:
+		go func() {
+			<-ctx.Done()
+			cronStopping.Store(false)
+		}()
 		return false, true, ErrCronStopTimeout
 	}
 }
@@ -100,16 +119,13 @@ func Start() error {
 
 // RawCron 获取原始的cron实例
 func RawCron() *cron.Cron {
-	cronInstanceLock.RLock()
-	defer cronInstanceLock.RUnlock()
-	return cronInstance
+	return cronInstance.Load()
 }
 
 func getCronInstance() (*cron.Cron, error) {
-	cronInstanceLock.RLock()
-	defer cronInstanceLock.RUnlock()
-	if cronInstance == nil {
+	instance := cronInstance.Load()
+	if instance == nil {
 		return nil, ErrCronStarterNotStarted
 	}
-	return cronInstance, nil
+	return instance, nil
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/acexy/golang-toolkit/logger"
+	"github.com/acexy/golang-toolkit/util/coll"
 	"github.com/robfig/cron/v3"
 )
 
@@ -16,28 +17,24 @@ var jobList = make(map[string]*jobInfo)
 
 func filterStack(stack string) string {
 	lines := strings.Split(stack, "\n")
-	start := 0
-	for i, line := range lines {
-		if strings.Contains(line, "runtime/panic.go") {
-			start = i
-			break
-		}
+	start := coll.SliceIndexBy(lines, func(line string) bool {
+		return strings.Contains(line, "runtime/panic.go")
+	})
+	if start < 0 {
+		start = 0
 	}
-	end := len(lines)
-	for i := start; i < len(lines); i++ {
-		if strings.Contains(lines[i], "cronstarter/job.go") {
-			end = i
-			break
-		}
+	filtered := lines[start:]
+	end := coll.SliceIndexBy(filtered, func(line string) bool {
+		return strings.Contains(line, "cronstarter/job.go")
+	})
+	if end <= 0 {
+		return strings.Join(filtered, "\n")
 	}
-	if start >= end {
-		return strings.Join(lines[start:], "\n")
-	}
-	return strings.Join(lines[start:end], "\n")
+	return strings.Join(filtered[:end], "\n")
 }
 
 type jobInfo struct {
-	jobId   *cron.EntryID
+	jobId   cron.EntryID
 	jobFunc *jobFunc
 }
 
@@ -173,6 +170,15 @@ func (j *jobFunc) Register() error {
 	if j.spec == nil {
 		return fmt.Errorf("%w: %s", ErrJobSpecNil, j.jobName)
 	}
+	if strings.TrimSpace(j.jobName) == "" {
+		return ErrJobNameEmpty
+	}
+	if strings.TrimSpace(*j.spec) == "" {
+		return fmt.Errorf("%w: %s", ErrJobSpecEmpty, j.jobName)
+	}
+	if j.cmd == nil {
+		return fmt.Errorf("%w: %s", ErrJobFuncNil, j.jobName)
+	}
 	instance, err := getCronInstance()
 	if err != nil {
 		return err
@@ -192,7 +198,7 @@ func (j *jobFunc) Register() error {
 		return err
 	}
 	jobList[j.jobName] = &jobInfo{
-		jobId:   &id,
+		jobId:   id,
 		jobFunc: j,
 	}
 	return nil
@@ -202,6 +208,9 @@ func (j *jobFunc) Register() error {
 func (j *jobFunc) FlushSpec(spec string) error {
 	defer j.Unlock()
 	j.Lock()
+	if strings.TrimSpace(spec) == "" {
+		return fmt.Errorf("%w: %s", ErrJobSpecEmpty, j.jobName)
+	}
 	instance, err := getCronInstance()
 	if err != nil {
 		return err
@@ -214,7 +223,7 @@ func (j *jobFunc) FlushSpec(spec string) error {
 	}
 	j.spec = &spec
 	j.autoReloadSpec = false
-	instance.Remove(*v.jobId)
+	instance.Remove(v.jobId)
 	delete(jobList, j.jobName)
 	id, err := instance.AddJob(spec, &job{
 		cmd:        j.cmd,
@@ -225,7 +234,7 @@ func (j *jobFunc) FlushSpec(spec string) error {
 		return err
 	}
 	jobList[j.jobName] = &jobInfo{
-		jobId:   &id,
+		jobId:   id,
 		jobFunc: j,
 	}
 	return nil
@@ -245,13 +254,19 @@ func (j *jobFunc) Remove() error {
 	if !flag {
 		return fmt.Errorf("%w: %s", ErrJobNotExists, j.jobName)
 	}
-	instance.Remove(*v.jobId)
+	instance.Remove(v.jobId)
 	delete(jobList, j.jobName)
 	return nil
 }
 
 // AddSimpleJob 添加简单任务
 func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
+	if strings.TrimSpace(spec) == "" {
+		return 0, ErrJobSpecEmpty
+	}
+	if cmd == nil {
+		return 0, ErrJobFuncNil
+	}
 	instance, err := getCronInstance()
 	if err != nil {
 		return 0, err
@@ -269,6 +284,12 @@ func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 
 // AddSimpleSingletonJob 添加简单单例任务 该任务将忽略正在运行的任务的调度
 func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
+	if strings.TrimSpace(spec) == "" {
+		return 0, ErrJobSpecEmpty
+	}
+	if cmd == nil {
+		return 0, ErrJobFuncNil
+	}
 	instance, err := getCronInstance()
 	if err != nil {
 		return 0, err

@@ -8,7 +8,7 @@ This starter owns scheduled-task infrastructure. Business code registers jobs th
 
 ## Requirements
 
-Current module Go version: `1.25.8`.
+Current module Go version: `1.26.7`.
 
 ## Installation
 
@@ -98,4 +98,6 @@ spec = "@every 2m"
 
 Register jobs only after the starter has been initialized by parent. Calls made before startup return `ErrCronStarterNotStarted`.
 
-The scheduler is process-wide. `ManualStart` delays scheduling but does not bypass parent initialization. The standard Cron starter does not allow parent-managed restart after successful shutdown.
+The scheduler is process-wide and published atomically. Shutdown withdraws it before waiting, so new registrations cannot race with stopping. A shutdown timeout does not restart scheduling; a new starter cannot start until already-running jobs have exited. `ManualStart` delays scheduling but does not bypass parent initialization. The standard Cron starter does not allow parent-managed restart after successful shutdown.
+
+Named jobs require a non-empty name, non-empty schedule, and non-nil callback. Simple jobs require a non-empty schedule and non-nil callback.

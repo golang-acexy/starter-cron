@@ -12,12 +12,24 @@ func resetCronStarterForTest() {
 	if instance := RawCron(); instance != nil {
 		instance.Stop()
 	}
-	cronInstanceLock.Lock()
-	cronInstance = nil
-	cronInstanceLock.Unlock()
+	cronInstance.Store(nil)
+	cronStopping.Store(false)
 	jobListLock.Lock()
 	jobList = make(map[string]*jobInfo)
 	jobListLock.Unlock()
+}
+
+func TestRepeatedStartReturnsError(t *testing.T) {
+	resetCronStarterForTest()
+	defer resetCronStarterForTest()
+
+	starter := &CronStarter{Config: CronConfig{ManualStart: true}}
+	if _, err := starter.Start(); err != nil {
+		t.Fatalf("start cron starter failed: %v", err)
+	}
+	if _, err := starter.Start(); !errors.Is(err, ErrCronStarterAlreadyStarted) {
+		t.Fatalf("expected ErrCronStarterAlreadyStarted, got %v", err)
+	}
 }
 
 func TestRegisterBeforeStartReturnsError(t *testing.T) {
@@ -27,6 +39,26 @@ func TestRegisterBeforeStartReturnsError(t *testing.T) {
 	err := NewJob("not-started", &spec, false, func() {}).Register()
 	if !errors.Is(err, ErrCronStarterNotStarted) {
 		t.Fatalf("expected ErrCronStarterNotStarted, got %v", err)
+	}
+}
+
+func TestJobInputValidation(t *testing.T) {
+	resetCronStarterForTest()
+	defer resetCronStarterForTest()
+	starter := &CronStarter{Config: CronConfig{ManualStart: true}}
+	if _, err := starter.Start(); err != nil {
+		t.Fatalf("start cron starter failed: %v", err)
+	}
+
+	spec := "@every 1h"
+	if err := NewJob("", &spec, false, func() {}).Register(); !errors.Is(err, ErrJobNameEmpty) {
+		t.Fatalf("expected ErrJobNameEmpty, got %v", err)
+	}
+	if err := NewJob("nil-func", &spec, false, nil).Register(); !errors.Is(err, ErrJobFuncNil) {
+		t.Fatalf("expected ErrJobFuncNil, got %v", err)
+	}
+	if _, err := AddSimpleJob(" ", func() {}); !errors.Is(err, ErrJobSpecEmpty) {
+		t.Fatalf("expected ErrJobSpecEmpty, got %v", err)
 	}
 }
 
