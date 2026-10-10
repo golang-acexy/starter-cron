@@ -47,6 +47,8 @@ type job struct {
 	cmd func()
 }
 
+// Run executes a callback and logs recovered panics; singleton wrappers skip overlapping triggers.
+// Automatic schedule checks occur only after the callback returns normally.
 func (j *job) Run() {
 	defer func() {
 		if err := recover(); err != nil {
@@ -100,23 +102,27 @@ func (j *job) flushSpec() {
 type jobFunc struct {
 	sync.Mutex
 
-	// 唯一任务名称
+	// jobName identifies the named registry entry.
 	jobName string
 
-	// 是否允许同一个任务在上一个调度未完成时继续被调度执行
+	// multiRun permits overlapping callback invocations.
 	multiRun bool
 
-	// 执行表达式
+	// spec is a caller-owned expression pointer read during registration and reload.
 	spec *string
 
-	// 任务函数
+	// cmd contains the application callback.
 	cmd func()
 
-	// 如果启用，则每次任务函数完成后将自动检查任务表达式是否变化，如果变化则自动重新加载规则
+	// autoReloadSpec checks for expression changes after successful callback completion.
 	autoReloadSpec bool
 }
 
-// NewJob 初始化一个Job配置
+// NewJob creates an unregistered named job; Register validates its inputs.
+// It borrows spec. Only the first multiRun value is used; false defaults to skipping overlaps
+// within each execution wrapper. Replacement creates a new wrapper and does not drain the old one.
+// Schedule reads are not synchronized with external writes or concurrent FlushSpec calls;
+// do not assume automatic reload is concurrency-safe.
 func NewJob(jobName string, spec *string, autoReloadSpec bool, cmd func(), multiRun ...bool) *jobFunc {
 	j := &jobFunc{
 		jobName:        jobName,
@@ -130,13 +136,21 @@ func NewJob(jobName string, spec *string, autoReloadSpec bool, cmd func(), multi
 	return j
 }
 
-// NewJobAndRegister 初始化一个Job配置 并注册
+// NewJobAndRegister creates and registers a named job after starter initialization.
+// It has the borrowed-spec and overlap constraints of NewJob; duplicate names return an error.
 func NewJobAndRegister(jobName string, spec *string, autoReloadSpec bool, cmd func(), multiRun ...bool) error {
 	return NewJob(jobName, spec, autoReloadSpec, cmd, multiRun...).Register()
 }
 
-// NewJobAndRegisterWithNewSpec 初始化一个Job配置 并注册 (刷新spec)
+// NewJobAndRegisterWithNewSpec registers a callback-driven schedule after starter initialization.
+// A nil callback returns ErrJobFuncNil without registering. An empty callback result keeps the
+// current expression; nonempty results trigger asynchronous replacement after normal completion.
+// Only the first multiRun value is used; overlapping callbacks can race on the internal expression.
+// Automatic replacement errors are logged and can leave the job unregistered.
 func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string, multiRun ...bool) error {
+	if cmd == nil {
+		return fmt.Errorf("%w: %s", ErrJobFuncNil, jobName)
+	}
 	var flushSpec string
 	flushSpec = spec
 	cmdWrap := func() {
@@ -148,7 +162,8 @@ func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string
 	return NewJob(jobName, &flushSpec, true, cmdWrap, multiRun...).Register()
 }
 
-// RemoveJob 移除任务
+// RemoveJob removes the currently registered name and logs missing entries or removal failures.
+// It does not cancel running callbacks or return an error; simple entry IDs are not named jobs.
 func RemoveJob(jobName string) {
 	jobListLock.Lock()
 	j, flag := jobList[jobName]
@@ -163,7 +178,9 @@ func RemoveJob(jobName string) {
 	}
 }
 
-// Register 注册该Job
+// Register validates inputs and adds the job to the current scheduler; duplicate names fail.
+// The starter must be initialized. Keep the borrowed expression stable during registration.
+// Lifecycle withdrawal is not atomic with registration after the scheduler pointer is captured.
 func (j *jobFunc) Register() error {
 	defer j.Unlock()
 	j.Lock()
@@ -204,7 +221,10 @@ func (j *jobFunc) Register() error {
 	return nil
 }
 
-// FlushSpec 更改Job规则 该操作将自动关闭 autoReloadSpec
+// FlushSpec replaces the entry registered under this job's name and disables automatic reload.
+// Blank expressions are rejected before removal; a parser error can leave the old entry removed.
+// It does not verify ownership of a reused name or cancel running callbacks. The replacement
+// gets a new overlap lock. Do not call it concurrently with callback-driven schedule checks.
 func (j *jobFunc) FlushSpec(spec string) error {
 	defer j.Unlock()
 	j.Lock()
@@ -240,7 +260,8 @@ func (j *jobFunc) FlushSpec(spec string) error {
 	return nil
 }
 
-// Remove 移除任务
+// Remove deletes the entry registered under this job's name without canceling running callbacks.
+// It returns ErrJobNotExists when absent and does not verify ownership of a reused name.
 func (j *jobFunc) Remove() error {
 	defer j.Unlock()
 	j.Lock()
@@ -259,7 +280,9 @@ func (j *jobFunc) Remove() error {
 	return nil
 }
 
-// AddSimpleJob 添加简单任务
+// AddSimpleJob registers an unnamed callback after starter initialization and allows overlap.
+// Blank expressions and nil callbacks are rejected; parser errors are returned.
+// Panics are logged without retry. Manage its returned entry ID through RawCron, not RemoveJob.
 func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 	if strings.TrimSpace(spec) == "" {
 		return 0, ErrJobSpecEmpty
@@ -282,7 +305,9 @@ func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 	return instance.AddFunc(spec, fn)
 }
 
-// AddSimpleSingletonJob 添加简单单例任务 该任务将忽略正在运行的任务的调度
+// AddSimpleSingletonJob registers an unnamed callback and skips overlapping triggers in this process.
+// Blank expressions and nil callbacks are rejected; parser errors are returned.
+// Panics are logged without retry. Its entry ID is not part of the named-job registry.
 func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
 	if strings.TrimSpace(spec) == "" {
 		return 0, ErrJobSpecEmpty

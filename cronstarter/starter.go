@@ -13,24 +13,28 @@ var cronInstance atomic.Pointer[cron.Cron]
 var cronLifecycleLock sync.Mutex
 var cronStopping atomic.Bool
 
+// CronConfig configures the process-wide scheduler; keep configuration fixed after startup.
 type CronConfig struct {
-	// 启动详细日志
+	// EnableLogger enables the Cron logging adapter; callback panic logging is independent.
 	EnableLogger bool
-	// 时区
+	// Location selects the scheduler time zone; nil uses the Cron default (time.Local).
 	Location *time.Location
-	// 启用包含秒字段的 Cron 表达式
+	// WithSeconds requires the seconds field in ordinary expressions; descriptors remain supported.
 	WithSeconds bool
-
-	// 手动启动定时任务
-	// 如果手动启动需要手动调用cronstarter.Start()方法启动整个任务执行器
+	// ManualStart publishes the scheduler without starting scheduling. Call package Start after registration.
 	ManualStart bool
 }
 
+// CronStarter owns the process-wide scheduler. Configure it before startup;
+// concurrent mutation of its configuration fields is not supported.
 type CronStarter struct {
-	Config      CronConfig
-	LazyConfig  func() CronConfig
-	config      *CronConfig
-	configOnce  sync.Once
+	// Config supplies static configuration when LazyConfig is nil.
+	Config CronConfig
+	// LazyConfig takes precedence over Config and is evaluated once on first startup.
+	LazyConfig func() CronConfig
+	config     *CronConfig
+	configOnce sync.Once
+	// CronSetting overrides the default non-restartable parent lifecycle setting.
 	CronSetting *parent.Setting
 }
 
@@ -47,6 +51,7 @@ func (c *CronStarter) getConfig() *CronConfig {
 	return c.config
 }
 
+// Setting returns the custom setting or the default priority-10, non-restartable parent setting.
 func (c *CronStarter) Setting() *parent.Setting {
 	if c.CronSetting != nil {
 		return c.CronSetting
@@ -54,6 +59,8 @@ func (c *CronStarter) Setting() *parent.Setting {
 	return parent.NewSetting("Cron-Starter", false, 10, false, time.Second*20, nil)
 }
 
+// Start initializes the singleton scheduler and starts scheduling unless ManualStart is true.
+// An existing scheduler or draining prior scheduler returns ErrCronStarterAlreadyStarted.
 func (c *CronStarter) Start() (any, error) {
 	cronLifecycleLock.Lock()
 	defer cronLifecycleLock.Unlock()
@@ -79,6 +86,10 @@ func (c *CronStarter) Start() (any, error) {
 	return instance, nil
 }
 
+// Stop withdraws the scheduler, clears named entries, and waits up to maxWaitTime for callbacks.
+// Timeout returns false, true, ErrCronStopTimeout; callbacks continue and block new startup until done.
+// Nonpositive waits expire immediately; if completion is also ready, either outcome can be selected.
+// Coordinate job API calls with shutdown; previously captured scheduler pointers remain usable.
 func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool, err error) {
 	cronLifecycleLock.Lock()
 	instance := cronInstance.Swap(nil)
@@ -107,7 +118,9 @@ func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool,
 	}
 }
 
-// Start 启动已注册任务 如果CronModule.ManualStart = true 时一定需要手动开启
+// Start begins scheduling on the initialized singleton, including when ManualStart is true.
+// Repeated calls on a running scheduler are harmless; an absent runtime returns ErrCronStarterNotStarted.
+// Coordinate calls with starter shutdown and do not restart a retained raw instance.
 func Start() error {
 	instance, err := getCronInstance()
 	if err != nil {
@@ -117,7 +130,8 @@ func Start() error {
 	return nil
 }
 
-// RawCron 获取原始的cron实例
+// RawCron returns the borrowed scheduler, or nil before initialization and after runtime withdrawal.
+// Raw operations bypass named-job bookkeeping; do not retain and restart it after starter shutdown.
 func RawCron() *cron.Cron {
 	return cronInstance.Load()
 }
