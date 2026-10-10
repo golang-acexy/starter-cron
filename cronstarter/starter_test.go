@@ -155,3 +155,26 @@ func TestNewJobAndRegisterWithNewSpec(t *testing.T) {
 		t.Fatalf("register dynamic spec job failed: %v", err)
 	}
 }
+
+func TestNewJobAndRegisterWithNewSpecRejectsNilCallback(t *testing.T) {
+	resetCronStarterForTest()
+	defer resetCronStarterForTest()
+
+	if err := NewJobAndRegisterWithNewSpec("nil-dynamic", "@every 1h", nil); !errors.Is(err, ErrJobFuncNil) {
+		t.Fatalf("expected ErrJobFuncNil before startup, got %v", err)
+	}
+
+	starter := &CronStarter{Config: CronConfig{ManualStart: true}}
+	if _, err := starter.Start(); err != nil {
+		t.Fatalf("start cron starter failed: %v", err)
+	}
+	if err := NewJobAndRegisterWithNewSpec("nil-dynamic", "@every 1h", nil, true); !errors.Is(err, ErrJobFuncNil) {
+		t.Fatalf("expected ErrJobFuncNil after startup, got %v", err)
+	}
+	if entries := RawCron().Entries(); len(entries) != 0 {
+		t.Fatalf("nil callback registered %d scheduler entries", len(entries))
+	}
+	if err := NewJobAndRegisterWithNewSpec("nil-dynamic", "@every 1h", func() string { return "" }); err != nil {
+		t.Fatalf("rejected callback reserved the job name: %v", err)
+	}
+}
