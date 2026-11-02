@@ -36,102 +36,71 @@ func filterStack(stack string) string {
 type jobInfo struct {
 	jobId   cron.EntryID
 	jobFunc *jobFunc
+	wrapper *job
 }
 
 type job struct {
-	m sync.Mutex
-
+	m          sync.Mutex
 	originSpec string
 	jobFunc    *jobFunc
-
-	cmd func()
+	cmd        func()
 }
 
-// Run executes a callback and logs recovered panics; singleton wrappers skip overlapping triggers.
-// Automatic schedule checks occur only after the callback returns normally.
+// Run executes a callback with panic recovery and skips overlapping singleton triggers.
+// Successful callbacks apply schedule changes before returning; retired results are ignored.
 func (j *job) Run() {
 	defer func() {
 		if err := recover(); err != nil {
-			jobName := "unnamed"
+			name := "unnamed"
 			if j.jobFunc != nil {
-				jobName = j.jobFunc.jobName
+				name = j.jobFunc.jobName
 			}
-			logger.Logrus().Errorln("job run error", err, "job name:", jobName, filterStack(string(debug.Stack())))
+			logger.Logrus().Errorln("job run error", err, "job name:", name, filterStack(string(debug.Stack())))
 		}
 	}()
 	if j.jobFunc == nil {
-		var flag = j.m.TryLock()
-		if flag {
-			defer j.m.Unlock()
-		} else {
+		if !j.m.TryLock() {
 			return
 		}
+		defer j.m.Unlock()
 		j.cmd()
+		return
+	}
+	owner := j.jobFunc
+	if !owner.multiRun {
+		if !owner.run.TryLock() {
+			return
+		}
+		defer owner.run.Unlock()
+	}
+	if owner.nextSpec != nil {
+		next := owner.nextSpec()
+		owner.reload(j, next, true)
 	} else {
-		if !j.jobFunc.multiRun {
-			var flag = j.m.TryLock()
-			if flag {
-				defer j.m.Unlock()
-			} else {
-				return
-			}
-		}
 		j.cmd()
-		if j.jobFunc.autoReloadSpec && j.jobFunc.spec != nil {
-			if j.originSpec != *j.jobFunc.spec {
-				go j.flushSpec()
-			}
-		}
-	}
-}
-
-func (j *job) flushSpec() {
-	err := j.jobFunc.Remove()
-	if err != nil {
-		logger.Logrus().WithError(err).Errorln("auto flush spec: remove job error")
-		return
-	}
-	j.originSpec = *j.jobFunc.spec
-	err = j.jobFunc.Register()
-	if err != nil {
-		logger.Logrus().WithError(err).Errorln("auto flush spec: register job error")
-		return
+		owner.reload(j, "", false)
 	}
 }
 
 type jobFunc struct {
 	sync.Mutex
-
-	// jobName identifies the named registry entry.
-	jobName string
-
-	// multiRun permits overlapping callback invocations.
-	multiRun bool
-
-	// spec is a caller-owned expression pointer read during registration and reload.
-	spec *string
-
-	// cmd contains the application callback.
-	cmd func()
-
-	// autoReloadSpec checks for expression changes after successful callback completion.
+	run            sync.Mutex
+	jobName        string
+	multiRun       bool
+	spec           *string
+	cmd            func()
+	nextSpec       func() string
 	autoReloadSpec bool
 }
 
 // NewJob creates an unregistered named job; Register validates its inputs.
-// It borrows spec. Only the first multiRun value is used; false defaults to skipping overlaps
-// within each execution wrapper. Replacement creates a new wrapper and does not drain the old one.
-// Schedule reads are not synchronized with external writes or concurrent FlushSpec calls;
-// do not assume automatic reload is concurrency-safe.
+// It borrows spec: external writes must not overlap registration or automatic schedule checks.
+// Only the first multiRun value is used. By default, one handle skips overlapping callbacks
+// across replacements. Removal and replacement do not cancel callbacks already running.
 func NewJob(jobName string, spec *string, autoReloadSpec bool, cmd func(), multiRun ...bool) *jobFunc {
-	j := &jobFunc{
-		jobName:        jobName,
-		spec:           spec,
-		cmd:            cmd,
-		autoReloadSpec: autoReloadSpec,
-	}
-	if len(multiRun) > 0 && multiRun[0] {
-		j.multiRun = true
+	j := &jobFunc{jobName: jobName, spec: spec, cmd: cmd, autoReloadSpec: autoReloadSpec}
+	if len(multiRun) > 0 {
+		j.multiRun = multiRun[0]
 	}
 	return j
 }
@@ -142,48 +111,39 @@ func NewJobAndRegister(jobName string, spec *string, autoReloadSpec bool, cmd fu
 	return NewJob(jobName, spec, autoReloadSpec, cmd, multiRun...).Register()
 }
 
-// NewJobAndRegisterWithNewSpec registers a callback-driven schedule after starter initialization.
-// A nil callback returns ErrJobFuncNil without registering. An empty callback result keeps the
-// current expression; nonempty results trigger asynchronous replacement after normal completion.
-// Only the first multiRun value is used; overlapping callbacks can race on the internal expression.
-// Automatic replacement errors are logged and can leave the job unregistered.
-func NewJobAndRegisterWithNewSpec(jobName string, spec string, cmd func() string, multiRun ...bool) error {
+// NewJobAndRegisterWithNewSpec registers a callback-driven schedule after initialization.
+// Nil callbacks return ErrJobFuncNil. Empty results keep the current schedule; invalid results
+// preserve the old entry and are logged. Internal updates support overlapping callbacks.
+// Results from superseded registrations are ignored. Only the first multiRun value is used.
+func NewJobAndRegisterWithNewSpec(jobName, spec string, cmd func() string, multiRun ...bool) error {
 	if cmd == nil {
 		return fmt.Errorf("%w: %s", ErrJobFuncNil, jobName)
 	}
-	var flushSpec string
-	flushSpec = spec
-	cmdWrap := func() {
-		newSpec := cmd()
-		if newSpec != "" {
-			flushSpec = newSpec
-		}
-	}
-	return NewJob(jobName, &flushSpec, true, cmdWrap, multiRun...).Register()
+	j := NewJob(jobName, &spec, true, nil, multiRun...)
+	j.nextSpec = cmd
+	return j.Register()
 }
 
 // RemoveJob removes the currently registered name and logs missing entries or removal failures.
 // It does not cancel running callbacks or return an error; simple entry IDs are not named jobs.
 func RemoveJob(jobName string) {
 	jobListLock.Lock()
-	j, flag := jobList[jobName]
+	j, ok := jobList[jobName]
 	jobListLock.Unlock()
-	if !flag {
+	if !ok {
 		logger.Logrus().Warning("job not exists:", jobName)
 		return
 	}
-	err := j.jobFunc.Remove()
-	if err != nil {
+	if err := j.jobFunc.Remove(); err != nil {
 		logger.Logrus().WithError(err).Errorln("remove job error", jobName, err)
 	}
 }
 
-// Register validates inputs and adds the job to the current scheduler; duplicate names fail.
-// The starter must be initialized. Keep the borrowed expression stable during registration.
-// Lifecycle withdrawal is not atomic with registration after the scheduler pointer is captured.
+// Register validates and registers this handle; duplicate names fail.
+// Registration is coordinated with starter shutdown. Keep the borrowed expression stable.
 func (j *jobFunc) Register() error {
-	defer j.Unlock()
 	j.Lock()
+	defer j.Unlock()
 	if j.spec == nil {
 		return fmt.Errorf("%w: %s", ErrJobSpecNil, j.jobName)
 	}
@@ -193,89 +153,120 @@ func (j *jobFunc) Register() error {
 	if strings.TrimSpace(*j.spec) == "" {
 		return fmt.Errorf("%w: %s", ErrJobSpecEmpty, j.jobName)
 	}
-	if j.cmd == nil {
+	if j.cmd == nil && j.nextSpec == nil {
 		return fmt.Errorf("%w: %s", ErrJobFuncNil, j.jobName)
 	}
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
 	instance, err := getCronInstance()
 	if err != nil {
 		return err
 	}
 	jobListLock.Lock()
 	defer jobListLock.Unlock()
-	_, flag := jobList[j.jobName]
-	if flag {
+	if _, ok := jobList[j.jobName]; ok {
 		return fmt.Errorf("%w: %s", ErrJobAlreadyExists, j.jobName)
 	}
-	id, err := instance.AddJob(*j.spec, &job{
-		cmd:        j.cmd,
-		originSpec: *j.spec,
-		jobFunc:    j,
-	})
+	wrapper := &job{cmd: j.cmd, originSpec: *j.spec, jobFunc: j}
+	id, err := instance.AddJob(*j.spec, wrapper)
 	if err != nil {
 		return err
 	}
-	jobList[j.jobName] = &jobInfo{
-		jobId:   id,
-		jobFunc: j,
-	}
+	jobList[j.jobName] = &jobInfo{jobId: id, jobFunc: j, wrapper: wrapper}
 	return nil
 }
 
-// FlushSpec replaces the entry registered under this job's name and disables automatic reload.
-// Blank expressions are rejected before removal; a parser error can leave the old entry removed.
-// It does not verify ownership of a reused name or cancel running callbacks. The replacement
-// gets a new overlap lock. Do not call it concurrently with callback-driven schedule checks.
+// FlushSpec replaces this handle's entry and disables automatic reload on success.
+// Invalid expressions preserve the old entry and settings. An absent entry or a name owned by
+// another handle returns ErrJobNotExists. Singleton exclusion is shared across replacements.
 func (j *jobFunc) FlushSpec(spec string) error {
-	defer j.Unlock()
 	j.Lock()
+	defer j.Unlock()
+	if err := j.replaceLocked(spec, nil); err != nil {
+		return err
+	}
+	j.autoReloadSpec = false
+	return nil
+}
+
+// replaceLocked keeps the old entry until parsing and adding its replacement succeeds.
+// The caller holds j.Mutex; source additionally identifies an automatic update's registration.
+func (j *jobFunc) replaceLocked(spec string, source *job) error {
 	if strings.TrimSpace(spec) == "" {
 		return fmt.Errorf("%w: %s", ErrJobSpecEmpty, j.jobName)
 	}
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
 	instance, err := getCronInstance()
 	if err != nil {
 		return err
 	}
 	jobListLock.Lock()
 	defer jobListLock.Unlock()
-	v, flag := jobList[j.jobName]
-	if !flag {
+	current, ok := jobList[j.jobName]
+	if !ok || current.jobFunc != j {
 		return fmt.Errorf("%w: %s", ErrJobNotExists, j.jobName)
 	}
-	j.spec = &spec
-	j.autoReloadSpec = false
-	instance.Remove(v.jobId)
-	delete(jobList, j.jobName)
-	id, err := instance.AddJob(spec, &job{
-		cmd:        j.cmd,
-		originSpec: spec,
-		jobFunc:    j,
-	})
+	if source != nil && current.wrapper != source {
+		return nil
+	}
+	wrapper := &job{cmd: j.cmd, originSpec: spec, jobFunc: j}
+	id, err := instance.AddJob(spec, wrapper)
 	if err != nil {
 		return err
 	}
-	jobList[j.jobName] = &jobInfo{
-		jobId:   id,
-		jobFunc: j,
+	instance.Remove(current.jobId)
+	jobList[j.jobName] = &jobInfo{jobId: id, jobFunc: j, wrapper: wrapper}
+	// Automatic borrowed-pointer updates keep the original pointer. Manual updates detach it.
+	if source == nil || j.nextSpec != nil {
+		j.spec = &spec
 	}
 	return nil
 }
 
-// Remove deletes the entry registered under this job's name without canceling running callbacks.
-// It returns ErrJobNotExists when absent and does not verify ownership of a reused name.
-func (j *jobFunc) Remove() error {
-	defer j.Unlock()
+// reload applies completed callback results without spawning untracked refresh goroutines.
+func (j *jobFunc) reload(source *job, next string, returned bool) {
 	j.Lock()
+	defer j.Unlock()
+	if !j.autoReloadSpec {
+		return
+	}
+	if returned {
+		if next == "" {
+			return
+		}
+	} else {
+		if j.spec == nil {
+			return
+		}
+		next = *j.spec
+	}
+	if next == source.originSpec {
+		return
+	}
+	if err := j.replaceLocked(next, source); err != nil {
+		logger.Logrus().WithError(err).Errorln("auto flush spec failed")
+	}
+}
+
+// Remove deletes only this handle's entry without canceling running callbacks.
+// Missing entries and names now owned by another handle return ErrJobNotExists.
+func (j *jobFunc) Remove() error {
+	j.Lock()
+	defer j.Unlock()
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
 	instance, err := getCronInstance()
 	if err != nil {
 		return err
 	}
 	jobListLock.Lock()
 	defer jobListLock.Unlock()
-	v, flag := jobList[j.jobName]
-	if !flag {
+	current, ok := jobList[j.jobName]
+	if !ok || current.jobFunc != j {
 		return fmt.Errorf("%w: %s", ErrJobNotExists, j.jobName)
 	}
-	instance.Remove(v.jobId)
+	instance.Remove(current.jobId)
 	delete(jobList, j.jobName)
 	return nil
 }
@@ -290,6 +281,8 @@ func AddSimpleJob(spec string, cmd func()) (cron.EntryID, error) {
 	if cmd == nil {
 		return 0, ErrJobFuncNil
 	}
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
 	instance, err := getCronInstance()
 	if err != nil {
 		return 0, err
@@ -315,6 +308,8 @@ func AddSimpleSingletonJob(spec string, cmd func()) (cron.EntryID, error) {
 	if cmd == nil {
 		return 0, ErrJobFuncNil
 	}
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
 	instance, err := getCronInstance()
 	if err != nil {
 		return 0, err

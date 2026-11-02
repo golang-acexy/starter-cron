@@ -99,9 +99,9 @@ if err != nil {
 }
 ```
 
-`NewJobAndRegisterWithNewSpec` rejects a nil callback with `ErrJobFuncNil` before registering anything. With `NewJob(..., &spec, true, ...)`, the expression is borrowed and checked after successful callback completion. Do not write to that string concurrently with task execution or registration. Automatic reload is not guaranteed safe alongside manual updates or overlapping callbacks; avoid `multiRun=true` for callback-driven updates.
+`NewJobAndRegisterWithNewSpec` rejects a nil callback with `ErrJobFuncNil` before registering anything. With `NewJob(..., &spec, true, ...)`, the expression is borrowed and checked after successful callback completion. Do not write to that string concurrently with task execution or registration. Internal callback-returned updates are synchronized with manual updates and support `multiRun=true`. Results from superseded registrations are ignored; overlapping callbacks have no guaranteed result order.
 
-`FlushSpec` disables automatic reload. A nonblank but invalid new expression can remove the old schedule before returning an error. Automatic replacement failures are logged and can also leave the task unregistered. Removing or replacing a schedule does not cancel a running callback; the replacement may run before an old callback finishes.
+`FlushSpec` disables automatic reload only on success. Invalid expressions preserve the previous schedule and settings; automatic update failures are logged. Automatic updates complete within the execution wrapper after the callback returns. Removing or replacing a schedule does not cancel a running callback. Singleton exclusion is shared across replacements of the same handle; `multiRun=true` allows overlap.
 
 ## Common API
 
@@ -119,12 +119,12 @@ if err != nil {
 
 Register jobs only after the starter has been initialized by parent. Calls made before startup return `ErrCronStarterNotStarted`.
 
-The scheduler is process-wide. Coordinate job registration, manual start, and updates with shutdown. Calls resolving the scheduler after shutdown begins fail, but an operation already using the old scheduler can continue. A shutdown timeout does not restart scheduling; a new starter cannot start until already-running jobs have exited. `ManualStart` delays scheduling but does not bypass parent initialization. The standard Cron starter does not allow parent-managed restart after successful shutdown.
+The scheduler is process-wide. Package job registration, manual start, removal, and updates are coordinated with shutdown. Operations complete before withdrawal or fail after it; retained raw scheduler pointers bypass this coordination. A shutdown timeout does not restart scheduling; a new starter cannot start until already-running jobs have exited. `ManualStart` delays scheduling but does not bypass parent initialization. The standard Cron starter does not allow parent-managed restart after successful shutdown.
 
 Named jobs require a non-empty name, non-empty schedule, and non-nil callback. Simple jobs require a non-empty schedule and non-nil callback.
 
-Named task handles operate by name. After removing a task and reusing its name, discard the old handle: it can remove or replace the new entry. `RawCron()` returns nil when the runtime is unavailable; raw entry operations bypass named-job bookkeeping.
+Named task handles can remove or replace only their own registration. After another handle reuses a name, the old handle returns `ErrJobNotExists` without changing the new entry. `RawCron()` returns nil when the runtime is unavailable; raw entry operations bypass named-job bookkeeping.
 
-Simple ordinary jobs allow overlapping runs. Named jobs and simple singleton jobs skip overlapping triggers within the current registration by default; named jobs use only the first optional `multiRun` value. This is process-local behavior, not a distributed lock. Callback panics are logged without retrying or rolling back application effects.
+Simple ordinary jobs allow overlapping runs. Named jobs and simple singleton jobs skip overlapping triggers by default; the same named handle retains its singleton exclusion across schedule replacements; named jobs use only the first optional `multiRun` value. This is process-local behavior, not a distributed lock. Callback panics are logged without retrying or rolling back application effects.
 
 On shutdown timeout, `Stop` returns `gracefully=false`, `stopped=true`, and `ErrCronStopTimeout`; running callbacks continue. Callbacks receive no cancellation context from this package, so applications must supply cancellation when needed.

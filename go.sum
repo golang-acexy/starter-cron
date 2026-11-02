@@ -1,11 +1,7 @@
-github.com/acexy/golang-toolkit v1.26.0 h1:BHdeRnGp8j5RGidu17Q5SmYU1Dy4th0URKPt/vd/zfc=
-github.com/acexy/golang-toolkit v1.26.0/go.mod h1:QJW7j9CMn8zBC8S0ksliJiEEQfOcfk3nQ2jm2yLaFqo=
-github.com/acexy/golang-toolkit v1.26.1 h1:bo2tOwZw5+76CR0X4W/4uLtXbiX5xDtoEKFbHH/yaTM=
-github.com/acexy/golang-toolkit v1.26.1/go.mod h1:QJW7j9CMn8zBC8S0ksliJiEEQfOcfk3nQ2jm2yLaFqo=
-github.com/golang-acexy/starter-parent v1.26.0 h1:aN86/M5mLEq1Eq5rH9ksYXaCDA7Q1dEndL4hTroBR7Q=
-github.com/golang-acexy/starter-parent v1.26.0/go.mod h1:5ciK0T6HB2/Lh/GXe4JL2mBKwxa0efyGzX9JNJZp5lA=
-github.com/golang-acexy/starter-parent v1.26.1 h1:pq6E+3u3+FpzxdnOfOHrY/r3baYrl3+sJvbAC5sYqWM=
-github.com/golang-acexy/starter-parent v1.26.1/go.mod h1:AMDHCdtiGkrwwjon0uYxx2oB/eH2WFShWUUn6fsnP+s=
+github.com/acexy/golang-toolkit v1.26.4 h1:IwPPOpFiaNBeQZHATW4O3I51uwikSyRUztiOBEVFw2A=
+github.com/acexy/golang-toolkit v1.26.4/go.mod h1:YH51By/qw3atCEEbrlOfT7Y+AW8Hq0uqgBMOpPekrF4=
+github.com/golang-acexy/starter-parent v1.26.3 h1:9HmDoPTXSPUdQ14JIfXZT3hR0I41gFcQdnP1G6ynAos=
+github.com/golang-acexy/starter-parent v1.26.3/go.mod h1:tshRJvrvcRqqGNNFpbJhAbd54fll9v9llbFFw0vUqkM=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=
 github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBBo=
@@ -14,7 +10,7 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=
 go.yaml.in/yaml/v3 v3.0.5/go.mod h1:HVTZu1O7/Vkt2N+BFy8Zza+lnLsABggaTM2ZpNIGuKg=
-golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
-golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
 gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=
