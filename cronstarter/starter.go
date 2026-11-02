@@ -89,7 +89,7 @@ func (c *CronStarter) Start() (any, error) {
 // Stop withdraws the scheduler, clears named entries, and waits up to maxWaitTime for callbacks.
 // Timeout returns false, true, ErrCronStopTimeout; callbacks continue and block new startup until done.
 // Nonpositive waits expire immediately; if completion is also ready, either outcome can be selected.
-// Coordinate job API calls with shutdown; previously captured scheduler pointers remain usable.
+// Package job operations are serialized with withdrawal; retained raw pointers bypass this guard.
 func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool, err error) {
 	cronLifecycleLock.Lock()
 	instance := cronInstance.Swap(nil)
@@ -98,11 +98,11 @@ func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool,
 		return false, true, ErrCronStarterNotStarted
 	}
 	cronStopping.Store(true)
-	cronLifecycleLock.Unlock()
-	ctx := instance.Stop()
 	jobListLock.Lock()
 	jobList = make(map[string]*jobInfo)
 	jobListLock.Unlock()
+	ctx := instance.Stop()
+	cronLifecycleLock.Unlock()
 	timer := time.NewTimer(maxWaitTime)
 	defer timer.Stop()
 	select {
@@ -120,8 +120,10 @@ func (c *CronStarter) Stop(maxWaitTime time.Duration) (gracefully, stopped bool,
 
 // Start begins scheduling on the initialized singleton, including when ManualStart is true.
 // Repeated calls on a running scheduler are harmless; an absent runtime returns ErrCronStarterNotStarted.
-// Coordinate calls with starter shutdown and do not restart a retained raw instance.
+// Calls are coordinated with starter shutdown; do not restart a retained raw instance.
 func Start() error {
+	cronLifecycleLock.Lock()
+	defer cronLifecycleLock.Unlock()
 	instance, err := getCronInstance()
 	if err != nil {
 		return err
